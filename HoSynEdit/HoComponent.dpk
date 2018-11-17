@@ -1,0 +1,50 @@
+package HoComponent;
+
+{$R *.res}
+{$IFDEF IMPLICITBUILDING This IFDEF should not be used by users}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO OFF}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS OFF}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION ON}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO OFF}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES OFF}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST OFF}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DEFINE RELEASE}
+{$ENDIF IMPLICITBUILDING}
+{$IMPLICITBUILD OFF}
+
+requires
+  rtl,
+  vcl,
+  xmlrtl,
+  dbrtl,
+  vcldb,
+  designide,
+  vclactnband,
+  vclx,
+  SynEdit_RXE7;
+
+contains
+  unt_HoSynEdit in 'unt_HoSynEdit.pas',
+  u_SynEditSearcher in 'u_SynEditSearcher.pas',
+  u_SynFindDlg in 'u_SynFindDlg.pas' {frmSynFindDlg},
+  u_SynReplaceDlg in 'u_SynReplaceDlg.pas' {SynReplaceDlg},
+  u_SynJumpDlg in 'u_SynJumpDlg.pas' {SynJumpDlg},
+  u_SynEditStrRes in 'u_SynEditStrRes.pas',
+  u_SynMsgDialog in 'u_SynMsgDialog.pas';
+
+end.

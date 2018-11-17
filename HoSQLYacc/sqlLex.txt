@@ -1,0 +1,298 @@
+NQUOTE    [^']
+NOTSPACE [^ \t\n]
+NENDCOMMENT [^*]"/"|"*"[^/]|[^*/]
+
+%{
+
+//说明：
+// c       --       任何非控制字符 比如 a
+// \c      --       c的字符本义。比如 \* 表示字符*
+// "s"     --       字符串s本义。比如 "**"
+// .       --       除换行外的所有字符
+// \n      --       换行
+// *       --       0次或无限次重复前面的表达式
+// +       --       1次或更多次重复前面的表达式
+// ?       --       0次或1次出现前面的表达式
+// ^       --       行的开始
+// $       --       行的结尾
+// a|b     --       a或者b
+// (a|b)+  --       1次或多次重复ab
+// "a+b"   --       字符串a+b本身(C中的特殊字符仍然有效)
+// [s]     --       s中的任意一个字符。比如[abc]表示a,b,c其中一个
+// [^s]    --       不存在于s中的任意一个字符。比如[^abc]表示除a,b,c外任意一个字符
+// r{m,n}  --       从m到n重复字符r。比如a{1,5}
+// r{m}    --       重复m次字符r。比如a{5}
+// r1r2    --       字符r1和r2。比如ab
+// (r)     --       r。比如(a|b)
+// r1/r2   --       r1当后面跟的是r2。比如a/b
+// <x>r    --       r当x开始。比如<x>abc
+// {s}     --       s所代表的表达式。比如定义“NQUOTE [^']”，表示非引号的任意字符，那么{s}等于[^']。
+                    
+//举例              
+// 表达式           匹配字符
+// abc              abc
+// abc*             ab,abc,abcc,abccc...
+// abc+             abc,abcc,abccc...
+// a(bc)+           abc,abcbc,abcbcbc...
+// a(bc)?           a,abc
+// [abc]            a,b,c中的一个
+// [a-z]            从a到z中的任意字符
+// [a\-z]           a,-,z中的一个
+// [-az]            -,a,z中的一个
+// [A-Za-z0-9]+     一个或更多个字母或数字
+// [\t\n]+          空白区
+// [^ab]            除a,b外的任意字符
+// [a^b]            a,^,b中的一个
+// [a|b]            a,|,b中的一个
+// a|b              a,b中的一个
+                    
+// 名称             功能
+// intyylex(void)   调用扫描器，返回标记
+// char*yytext      指针，指向所匹配的字符串
+// yyleng           所匹配的字符串的长度
+// yylval           与标记相对应的值
+// intyywrap(void)  约束，如果返回1表示扫描完成后程序就结束了，否则返回0
+// FILE*yyout       输出文件
+// FILE*yyin        输入文件
+// INITIAL          初始化开始环境
+// BEGIN            按条件转换开始环境
+// ECHO             输出所匹配的字符串 
+
+function is_keyword(id : string; var token : integer) : boolean;
+  (* checks whether id is Pascal keyword; if so, returns corresponding
+     token number in token *)
+  const
+    id_len = 20;
+  type
+    Ident = string[id_len];
+  const
+    (* table of Pascal keywords: *)
+    no_of_keywords = 35;
+    keyword : array [1..no_of_keywords] of Ident = (
+      'ALL', 'AND', 'AS', 'ASC', 'BY'
+      , 'DESC', 'DISTINCT', 'EXISTS', 'FETCH', 'FIRST'
+      , 'FROM', 'GROUP', 'HAVING', 'IN', 'INNER'
+      , 'IS', 'JOIN', 'LEFT', 'LIKE', 'NOT'
+      , 'NULL', 'ON', 'ONLY', 'OR', 'ORDER'
+      , 'OUTER', 'RIGHT', 'ROWS', 'SELECT', 'SET'
+      , 'UNION', 'UPDATE', 'UR', 'WHERE', 'WITH'
+    );
+    keyword_token : array [1..no_of_keywords] of integer = (
+      TK_ALL, TK_AND, TK_AS, TK_ASC, TK_BY
+      , TK_DESC, TK_QUANTIFIER, TK_EXISTS, TK_FETCH, TK_FIRST
+      , TK_FROM, TK_GROUP, TK_HAVING, TK_IN, TK_INNER
+      , TK_IS, TK_JOIN, TK_LEFT, TK_LIKE, TK_NOT
+      , TK_NULL, TK_ON, TK_ONLY, TK_OR, TK_ORDER
+      , TK_OUTER, TK_RIGHT, TK_ROWS, TK_SELECT, TK_SET
+      , TK_UNION, TK_UPDATE, TK_UR, TK_WHERE, TK_WITH
+    );
+  var m, n, k : integer;
+  begin
+    id := upperCase(id);
+    (* binary search: *)
+    m := 1; n := no_of_keywords;
+    while m<=n do
+      begin
+        k := m+(n-m) div 2;
+        if id=keyword[k] then
+          begin
+            is_keyword := true;
+            token := keyword_token[k];
+            exit
+          end
+        else if id>keyword[k] then
+          m := k+1
+        else
+          n := k-1
+      end;
+    is_keyword := false
+  end(*is_keyword*);
+
+%}
+
+%start
+
+
+%%
+
+%{
+
+var
+  _kw : integer;
+  _pos: integer;
+  _str: string;
+  _c  : char;
+
+%}
+
+"," begin
+    yylval.yyString := yytext;
+    return(TK_COMMA); 
+  end;
+  
+"(" begin
+    yylval.yyString := yytext;
+    return(TK_LEFT_PARENT); 
+  end;
+  
+")" begin
+    yylval.yyString := yytext;
+    return(TK_RIGHT_PARENT); 
+  end;
+  
+[|]?"*"[|]?
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := yytext;
+    yylval.yyTSQLTreeNode.R_Keyword := snkIdentifier;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    if pos('|', yytext) > 0 then
+      yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_ASTERISK);
+  end;
+  
+"+"|"-"|"="|">="|">"|"<="|"<"|"<>"|"/"
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := yytext;
+    yylval.yyTSQLTreeNode.R_Keyword := snkOperator;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    if pos('|', yytext) > 0 then
+      yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_OPERATOR);
+  end;
+
+[:]
+  begin
+    yylval.yyString := yytext;
+    return(TK_COLON); 
+  end;
+
+[?]
+  begin
+    yylval.yyString := yytext;
+    return(TK_QUESTION); 
+  end;
+
+[#]
+  begin
+    yylval.yyString := yytext;
+    return(TK_WELL);
+  end;
+
+[.]
+  begin
+    yylval.yyString := yytext;
+    return(TK_SPOT);
+  end;
+
+[|]?[a-zA-Z]([a-zA-Z0-9_])*[|]?([a-zA-Z0-9_])*
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    _pos := pos('|', yytext);
+    if _pos > 0 then begin
+      _str := Copy(yytext, 1, _pos-1) + Copy(yytext, _pos+1, Length(yytext));
+      yylval.yyTSQLTreeNode.R_IsCurrent := true;
+    end else begin
+      _str := yytext;
+    end;
+    
+    yylval.yyTSQLTreeNode.R_Text := _str;
+    if is_keyword(_str, _kw) then begin
+      yylval.yyTSQLTreeNode.R_Keyword := snkKeyword;
+      yylval.yyTSQLTreeNode.R_Type := sntNode;
+      return(_kw);
+    end else begin
+      yylval.yyTSQLTreeNode.R_Keyword := snkIdentifier;
+      yylval.yyTSQLTreeNode.R_Type := sntNode;
+      return(TK_IDENTIFIER);
+    end;
+  end;
+
+[|]
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := '';
+    yylval.yyTSQLTreeNode.R_Keyword := snkIdentifier;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_IDENTIFIER);
+  end;
+
+[ \n\t]+ ; 
+
+"'"
+  begin
+    repeat
+      _c := get_char;
+      yytext := yytext + _c;
+      case _c of
+        '''' : begin
+          _c := get_char;
+          if _c<>'''' then begin
+            break; 
+          end;
+        end;
+        #0 : begin
+          break;
+        end;
+      end;
+    until false;
+    unget_char(_c);
+
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := yytext;
+    yylval.yyTSQLTreeNode.R_Keyword := snkString;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    if pos('|', yytext) > 0 then
+      yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_STRING);
+  end;
+
+--(.)* 
+  begin
+    //对 -- 注释的处理
+  end;
+
+"/*"
+  begin
+    //对 /*...*/ 注释的处理
+    repeat
+      _c := get_char;
+      case _c of
+        '*' : begin
+          _c := get_char;
+          if _c='/' then exit else unget_char(_c)
+        end;
+        #0 : begin
+          exit;
+        end;
+      end;
+    until false
+  end;
+
+[0-9]+[|]?
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := yytext;
+    yylval.yyTSQLTreeNode.R_Keyword := snkNumber;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    if pos('|', yytext) > 0 then
+      yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_INT);
+  end;
+
+[0-9]+([.[0-9]+])*[|]?
+  begin
+    yylval.yyTSQLTreeNode := g_tree.P_NewNode;
+    yylval.yyTSQLTreeNode.R_Text := yytext;
+    yylval.yyTSQLTreeNode.R_Keyword := snkFloat;
+    yylval.yyTSQLTreeNode.R_Type := sntNode;
+    if pos('|', yytext) > 0 then
+      yylval.yyTSQLTreeNode.R_IsCurrent := true; 
+    return(TK_NUM);
+  end;
+
+";" return(TK_END)
+%%
+

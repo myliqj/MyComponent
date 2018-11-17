@@ -1,0 +1,1220 @@
+%{
+library sqlYacc;
+
+uses
+  sharemem,
+  classes,
+	SysUtils,
+	ComCtrls,
+	TypInfo,
+	Dialogs,
+	
+	dlib,
+	yacclib,
+	lexlib,
+	unt_ISQLTreeNode in 'unt_ISQLTreeNode.pas',
+	unt_TSQLTreeNode in 'unt_TSQLTreeNode.pas',
+  DGL_SQLTreeList in 'DGL_SQLTreeList.pas'
+  ;
+
+var
+  g_tree: TSQLTreeNodeManager;
+  _tmpNode: TSQLTreeNode;
+  _step: integer;
+
+procedure G_Init;
+begin
+  if assigned(g_tree) then begin
+    g_tree.free;
+  end;
+  g_tree:= TSQLTreeNodeManager.Create(nil); 
+end;
+  
+%}
+
+%token <TSQLTreeNode> TK_IDENTIFIER TK_STRING TK_INT TK_NUM
+
+%token <TSQLTreeNode> TK_SELECT TK_FROM TK_QUANTIFIER
+%token <TSQLTreeNode> TK_WHERE TK_AND TK_OR TK_NOT TK_EXISTS TK_IS TK_LIKE
+%token <TSQLTreeNode> TK_INNER TK_LEFT TK_RIGHT TK_OUTER TK_JOIN TK_ON
+%token <TSQLTreeNode> TK_ORDER TK_ASC TK_DESC
+%token <TSQLTreeNode> TK_GROUP TK_HAVING
+%token <TSQLTreeNode> TK_BY TK_AS TK_NULL TK_IN TK_UNION TK_ALL TK_WITH 
+%token <TSQLTreeNode> TK_UR TK_FETCH TK_FIRST TK_ROWS TK_ONLY
+
+%token <TSQLTreeNode> TK_UPDATE TK_SET
+
+%token <TSQLTreeNode> TK_ASTERISK
+
+%token <String> TK_COMMA TK_LEFT_PARENT TK_RIGHT_PARENT TK_PLUS TK_SLASH TK_COLON TK_QUESTION TK_WELL TK_SPOT
+%token <TSQLTreeNode> TK_OPERATOR
+
+%token TK_END
+
+
+
+%type <TSQLTreeNode> tyQuery
+%type <TSQLTreeNode> tySelectClause tySelectList tySelectItem tyFieldExpr
+%type <TSQLTreeNode> tyFromClause tyTableList tyTableItem tyTableExpr
+
+%type <TSQLTreeNode> tyUpdate
+%type <TSQLTreeNode> tyUpdateClause tySetClause tySetList tyGroupSetList tySetItem
+
+%type <TSQLTreeNode> tyWhereClause tyWhereList tyWhereItem tyConditionElement 
+%type <TSQLTreeNode> tyJoinClause tyJoinItem tyJoin
+%type <TSQLTreeNode> tyOrAnd tyIn tyLike tyIs
+%type <TSQLTreeNode> tyGroupClause tyGroupList tyGroupItem tyHavingClause
+%type <TSQLTreeNode> tyOrderClause tyOrderList tyOrderItem
+%type <TSQLTreeNode> tyExpression
+%type <TSQLTreeNode> tyOtherClause
+
+%left '+' '-'
+%left '*' '/'
+
+%%
+
+%{
+  var 
+    //_node: TSQLTreeNode;
+    _i: integer;
+%}
+
+input :
+  | input TK_END 
+    {
+       yyaccept; 
+    }
+  | input tyQuery TK_END
+    {
+    }
+  | input tyUpdate TK_END
+    {
+    }
+  | error TK_END 
+    { 
+       //出错时，指针移向TK_END(分号;)继续
+       //writeln(g_tree.P_GetSubTreeText(0));
+       //G_Init;
+       yyerrok; 
+     }
+  ;
+
+tyQuery:
+   tySelectClause tyFromClause tyJoinClause tyWhereClause tyGroupClause tyOrderClause tyOtherClause
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+      //  inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Query1';
+      $$.R_Keyword := snkQuery;
+      $$.R_Type := sntSentence;
+      $$.R_Text := C_QUERY;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $2);
+      if $3 <> nil then
+        $$.P_InsertChild(acmLast, $3);
+      if $4 <> nil then
+        $$.P_InsertChild(acmLast, $4);
+      if $5 <> nil then
+        $$.P_InsertChild(acmLast, $5);
+      if $6 <> nil then
+        $$.P_InsertChild(acmLast, $6);
+    }
+  | tyQuery TK_UNION tyQuery
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+      //  inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Query2';
+      $$.R_Text := '<' + UpperCase($$.R_Text) + '>';
+      $$.R_Keyword := snkUnionClause;
+      $$.R_Type := sntKey;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | tyQuery TK_UNION TK_ALL tyQuery
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+      //  inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Query3';
+      $$.R_Text := '<' + UpperCase($$.R_Text) + ' ALL>';
+      $$.R_Keyword := snkUnionClause;
+      $$.R_Type := sntKey;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $4);
+      g_tree.P_TakeBack($3);
+    }
+    ;
+
+tyExpression :
+  | TK_IDENTIFIER
+    {
+      $$:=$1;	
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Expression1';
+      $$.R_Keyword := snkExpression;
+    }
+  | TK_INT
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Expression2';
+      $$.R_Keyword := snkExpression;
+    }
+  | TK_IDENTIFIER TK_SPOT TK_IDENTIFIER
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Expression3';
+      $$.R_Keyword := snkAliasAndField;
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '.' + $3.R_Text;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | TK_INT TK_SPOT TK_IDENTIFIER
+    {
+      //参数引用。如：:?1.fieldName
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Expression4';
+      $$.R_Keyword := snkAliasAndField;
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '.' + $3.R_Text;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | TK_IDENTIFIER TK_SPOT 
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Expression5';
+      $$.R_Keyword := snkExpression;
+    }
+    ;
+
+tySelectClause :
+   TK_SELECT tySelectList 
+    {
+      //ShowMessage('TK_SELECT tySelectList');
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectClause1';
+      if $1.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($1);
+    }
+  | TK_SELECT TK_QUANTIFIER tySelectList
+    {
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectClause2';
+      if $1.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      $$.P_InsertChild(acmLast, $2);
+      g_tree.P_Takeback($1);
+    }
+  | TK_SELECT TK_ALL tySelectList
+    {
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectClause3';
+      if $1.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      $$.P_InsertChild(acmLast, $2);
+      g_tree.P_Takeback($1);
+    }
+    ;
+    
+tySelectList :
+   tySelectItem 
+    {
+      //ShowMessage('tySelectItem' + $1.R_Text);
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectList1';
+      $$.R_Keyword := snkFields;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_FIELDS;
+      $$.P_InsertChild(acmLast, $1);
+    }
+  | tySelectList TK_COMMA tySelectItem
+    {
+      //ShowMessage('tySelectList 1: + ' + $1.R_Text + ' , tySelectList 2: ' + $3.R_Text);
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectList2';
+      $$.P_InsertChild(acmLast, $3);
+      //g_tree.P_MoveChildNodes($3, $$, acmLast); (* 字段列表节点重复，只要其中一个 *)
+      //g_tree.P_Takeback($3);
+    }
+  ;
+  
+tySelectItem :
+   TK_LEFT_PARENT tyQuery TK_RIGHT_PARENT  
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectItem1';
+     }
+  | tyFieldExpr
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectItem2';
+    }
+  | tySelectItem TK_AS TK_IDENTIFIER
+    {
+      //字段别名 
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectItem3';
+      $$.R_Nodes[_i].R_AliasName := $3.R_Text;
+      if $3.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($2);
+      g_tree.P_Takeback($3);
+    }
+  | tySelectItem TK_IDENTIFIER
+    {
+      //字段别名 
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')SelectItem4';
+      $$.R_AliasName := $2.R_Text;
+      if $2.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($2);
+    }
+    ;
+  
+tyFieldExpr:
+    {
+      (* 字段为空 *)
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr1';
+      $$.R_Keyword := snkIdentifier;
+      $$.R_Type := sntNode;
+      $$.R_Text := '';
+    }
+  | tyExpression
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr2';
+    }
+  | TK_IDENTIFIER TK_SPOT TK_ASTERISK
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr3';
+      $$.R_Keyword := snkAliasAndField;
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '.' + $3.R_Text;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | TK_ASTERISK
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr4';
+    }
+  | TK_NUM
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr5';
+    }
+  | TK_STRING
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr6';
+    }
+  | TK_LEFT_PARENT tyFieldExpr TK_RIGHT_PARENT
+    {
+      $$:=$2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr7';
+    }
+  | TK_IDENTIFIER TK_LEFT_PARENT TK_QUANTIFIER tySelectList TK_RIGHT_PARENT
+    {
+      (* 函数 *)
+      $$ := $4;
+      inc(_step);
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '(' + $4.R_Text + ')';
+      g_tree.P_TakeBack($1);
+      g_tree.P_TakeBack($3);
+    }
+  | TK_IDENTIFIER TK_LEFT_PARENT tySelectList TK_RIGHT_PARENT
+    {
+      (* 函数 *)
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr8';
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '(' + $3.R_Text + ')';
+      g_tree.P_TakeBack($1);
+      //ShowMessage('tyFieldExpr');
+    }
+  | tyFieldExpr TK_OPERATOR tyFieldExpr
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FieldExpr9';
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | TK_COLON TK_QUESTION tyExpression
+    {
+      // 格式：':?参数'
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement2';
+      $$.R_Keyword := snkLinkParam;
+     }
+  | TK_COLON tyExpression
+    {
+      // 格式：':参数'
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement3';
+      $$.R_Keyword := snkParam;
+      $$.R_Text := $2.R_Text;
+     }
+  | TK_LEFT_PARENT tyQuery TK_RIGHT_PARENT  
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement4';
+      //ShowMessage('tyConditionElement');
+     }
+    ;
+    
+tyFromClause:
+   TK_FROM tyTableList 
+    { 
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')FromClause1';
+      if $1.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($1);
+    }
+    ;
+    
+tyTableList:
+    {
+      (* 表为空 *)
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableList1';
+      $$.R_Keyword := snkTables;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_TABLES;
+    }
+  | tyTableItem  
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableList2';
+      $$.R_Keyword := snkTables;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_TABLES;
+      $$.P_InsertChild(acmLast, $1);
+    }
+  | tyTableList TK_COMMA tyTableItem
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableList3';
+      $$.P_InsertChild(acmLast, $3);
+      //g_tree.P_MoveChildNodes($3, $1, acmLast); (* 字段列表节点重复，只要其中一个 *)
+      //g_tree.P_Takeback($3);
+    }
+    ;
+
+tyTableItem:
+   TK_LEFT_PARENT tyQuery TK_RIGHT_PARENT
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableItem1';
+      //ShowMessage('tyTableItem');
+    }
+  | tyTableExpr
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableItem2';
+     }
+  | tyTableItem TK_AS TK_IDENTIFIER 
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableItem3';
+      $$.R_AliasName := $3.R_Text;
+      if $3.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($2);
+      g_tree.P_Takeback($3);
+    }
+  | tyTableItem TK_IDENTIFIER
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableItem4';
+      $$.R_AliasName := $2.R_Text;
+      if $2.R_IsCurrent then
+        $$.R_IsCurrent := true;
+      g_tree.P_Takeback($2);
+    }
+    ;
+    
+tyTableExpr: 
+   TK_IDENTIFIER
+    {
+      $$:=$1; 
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableExpr1';
+    }
+  | TK_IDENTIFIER TK_SPOT TK_IDENTIFIER
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableExpr2';
+      $$.R_Keyword := snkSchemaAndTable;
+      $$.R_Type := sntNode;
+      $$.R_Text := $1.R_Text + '.' + $3.R_Text;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | TK_LEFT_PARENT tyTableExpr TK_RIGHT_PARENT
+    {
+      $$:=$2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')TableExpr3';
+      //ShowMessage('tyTableItem');
+    }
+    ;
+    
+tyJoinClause:
+    { 
+      $$ := nil;
+    }
+  | tyJoinClause tyJoinItem
+    {
+      if $1=nil then begin
+        $$ := g_tree.P_NewNode;
+        $$.R_Keyword := snkJoins;
+        $$.R_Type := sntKey;
+        $$.R_Text := C_JOINS;
+      end else begin
+        $$:=$1;
+      end;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinClause2';
+      $$.P_InsertChild(acmLast, $2);
+    }
+    ;
+ 
+tyJoinItem:
+   tyJoin tyTableItem TK_ON tyWhereList
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+
+      _tmpNode := g_tree.P_NewNode;
+      $$.P_InsertChild(acmLast, _tmpNode);
+      _tmpNode.R_Text := C_TABLES;
+      _tmpNode.R_Keyword := snkTables;
+      _tmpNode.R_Type := sntKey;
+      _tmpNode.P_InsertChild(acmLast, $2);
+
+      $$.P_InsertChild(acmLast, $3);
+
+      $3.R_Keyword := snkWhereClause;
+      $3.R_Type := sntKey;
+      $3.R_Text := C_JOIN_CONDITIONS;
+      $3.P_InsertChild(acmLast, $4);
+    }
+    ;
+    
+tyJoin:
+   TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_INNER_JOIN;
+    }
+  | TK_INNER TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_INNER_JOIN;
+      g_tree.P_Takeback($2);
+    }
+  | TK_LEFT TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_LEFT_JOIN;
+      g_tree.P_Takeback($2);
+    }
+  | TK_LEFT TK_OUTER TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_LEFT_JOIN;
+      g_tree.P_Takeback($2);
+      g_tree.P_Takeback($3);
+    }
+  | TK_RIGHT TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_RIGHT_JOIN;
+      g_tree.P_Takeback($2);
+    }
+  | TK_RIGHT TK_OUTER TK_JOIN
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')JoinItem1';
+      $$.R_Keyword := snkJoinClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_RIGHT_JOIN;
+      g_tree.P_Takeback($2);
+      g_tree.P_Takeback($3);
+    }
+    ;
+
+tyWhereClause: { (* 可以为空 *) }
+  | TK_WHERE tyWhereList
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereClause1';
+      $$.R_Keyword := snkWhereClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_CONDITIONS;
+      $$.P_InsertChild(acmLast, $2);
+    }
+    ;
+    
+tyWhereList: { (* 正常不可以为空 *) }
+  | tyWhereItem 
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereList1';
+      //ShowMessage('tyWhereList -> tyWhereItem = '
+      //  + $1.R_Text);
+    }
+  | tyWhereList tyOrAnd tyWhereList
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereList2';
+      $$.R_Keyword := snkConditionClause;
+      $$.R_Type := sntNode;
+      $$.P_InsertChild(acmLast, $1); 
+      $$.P_InsertChild(acmLast, $3);
+      //ShowMessage('tyWhereList -> tyWhereList tyOrAnd tyWhereList = '
+      //  + $1.R_Text + ' ' + $$.R_Text + ' ' + $3.R_Text);
+    }
+  | TK_NOT tyWhereList
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereList3';
+      $$.R_Keyword := snkConditionClause;
+      $$.R_Type := sntNode;
+      $$.P_InsertChild(acmLast, $2); 
+    }
+  | TK_LEFT_PARENT tyWhereList TK_RIGHT_PARENT
+    {
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereList4';
+      //ShowMessage('tyWhereList -> TK_LEFT_PARENT tyWhereList TK_RIGHT_PARENT = '+ $$.R_Text + ')');
+    }
+    ;
+    
+tyWhereItem:
+   TK_EXISTS TK_LEFT_PARENT tyQuery TK_RIGHT_PARENT  
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereItem1';
+      $$.R_Keyword := snkConditionClause;
+      $$.R_Type := sntNode;
+      $$.P_InsertChild(acmLast, $3);
+      //ShowMessage('tyWhereItem');
+     }
+  | tyConditionElement
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereItem2';
+      //ShowMessage('tyWhereItem - tyConditionElement : ' + $$.R_Text);
+    }
+    ;
+
+tyConditionElement:
+    {
+      (* 字段为空 *)
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement1';
+      $$.R_Keyword := snkNone;
+      $$.R_Text := '';
+    }
+  | tyFieldExpr
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement5';
+     }
+  | tyConditionElement tyIn TK_LEFT_PARENT tySelectList TK_RIGHT_PARENT
+    {
+      (* 表达式 *)
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement8';
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $4);
+      //ShowMessage('tyConditionElement');
+    }
+  | tyConditionElement tyIn TK_LEFT_PARENT tyQuery TK_RIGHT_PARENT
+    {
+      (* 表达式 *)
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement9';
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $4);
+      //ShowMessage('tyConditionElement');
+    }
+  | tyConditionElement tyIs TK_NULL
+    {
+      (* 表达式 *)
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement10';
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+  | tyConditionElement tyLike TK_STRING
+    {
+      (* 表达式 *)
+      $$ := $2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')ConditionElement11';
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+    ;
+    
+tyOrAnd:
+   TK_OR 
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrAnd1';
+      $$.R_Keyword := snkConditionClause;
+      $$.R_Type := sntNode;
+    }     
+  | TK_AND
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrAnd2';
+      $$.R_Keyword := snkConditionClause;
+      $$.R_Type := sntNode;
+    }     
+    ;
+    
+tyOrderClause:
+  | TK_ORDER TK_BY tyOrderList
+    {
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderClause1';
+      g_tree.P_Takeback($1);
+      g_tree.P_Takeback($2);
+    }
+    ;
+    
+tyOrderList:
+  | tyOrderItem 
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderList1';
+      $$.R_Keyword := snkOrderClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_ORDER;
+      $$.P_InsertChild(acmLast, $1);
+    }
+  | tyOrderList TK_COMMA tyOrderItem 
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderList2';
+      $$.P_InsertChild(acmLast, $3);
+    }
+    ;
+    
+tyOrderItem:
+  | tyFieldExpr
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderItem1';
+    }
+  | tyOrderItem TK_ASC
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderItem2';
+      g_tree.P_Takeback($2);
+    }
+  | tyOrderItem TK_DESC
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')OrderItem3';
+      g_tree.P_Takeback($2);
+    }
+  ;
+
+tyGroupClause:
+  | TK_GROUP TK_BY tyGroupList tyHavingClause
+    {
+      $$ := $3;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')GroupClause1';
+      g_tree.P_Takeback($1);
+      g_tree.P_Takeback($2);
+      if $4 <> nil then begin
+        $$.P_InsertChild(acmLast, $4);
+      end;
+    }
+  ;
+
+tyGroupList:
+  | tyGroupItem
+    {
+      $$ := g_tree.P_NewNode;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')GroupList1';
+      $$.R_Keyword := snkGroupClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_GROUP;
+      $$.P_InsertChild(acmLast, $1);
+    }
+  | tyGroupList TK_COMMA tyGroupItem
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')GroupList1';
+      $$.P_InsertChild(acmLast, $3);
+    }
+  ;
+
+tyGroupItem:
+  | tyFieldExpr
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')GroupItem1';
+    }
+  ;
+
+tyHavingClause:
+  | TK_HAVING tyWhereList
+    {
+      $$ := $1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')HavingClause1';
+      $$.R_Keyword := snkWhereClause;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_HAVING_CONDITIONS;
+      $$.P_InsertChild(acmLast, $2);
+    }
+  ;
+
+tyOtherClause:
+  | TK_WITH TK_UR
+    {
+      g_tree.P_TakeBack($1);
+      g_tree.P_TakeBack($2);
+    }
+  | TK_FETCH TK_FIRST TK_INT TK_ROWS TK_ONLY
+    {
+      g_tree.P_TakeBack($1);
+      g_tree.P_TakeBack($2);
+      g_tree.P_TakeBack($3);
+      g_tree.P_TakeBack($4);
+      g_tree.P_TakeBack($5);
+    }
+    ;
+
+tyIn:
+   TK_IN
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')In1';
+    }
+  | TK_NOT TK_IN
+    {
+      $$:=$2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')In2';
+      $$.R_Text := $1.R_Text + ' ' + $2.R_Text;
+      g_tree.P_Takeback($1);
+    }
+    ;
+    
+tyLike:
+   TK_LIKE
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Like1';
+    }
+  | TK_NOT TK_LIKE
+    {
+      $$:=$2;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Like2';
+      $$.R_Text := $1.R_Text + ' ' + $2.R_Text;
+      g_tree.P_Takeback($1);
+    }
+    ;
+
+tyIs:
+   TK_IS
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Is1';
+    }
+  | TK_IS TK_NOT
+    {
+      $$:=$1;
+      inc(_step);
+      //if $$.R_Path<>'' then
+        //$$.R_Path := $$.R_Path + '->';
+      //$$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')Is2';
+      $$.R_Text := $1.R_Text + ' ' + $2.R_Text;
+      g_tree.P_Takeback($2);
+    }
+    ;
+    
+tyUpdate:
+   tyUpdateClause tySetClause tyWhereClause
+    {
+      $$ := g_tree.P_newNode;
+      $$.R_Keyword := snkUpdate;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_UPDATE;
+      $$.P_InsertChild(acmLast, $1);
+      if $2 <> nil then
+        $$.P_InsertChild(acmLast, $2);
+      if $3 <> nil then
+        $$.P_InsertChild(acmLast, $3);
+    }
+    ;
+    
+tyUpdateClause:
+  | TK_UPDATE tyTableItem
+    {
+      $$ := $1;
+      inc(_step);
+      if $$.R_Path<>'' then
+        $$.R_Path := $$.R_Path + '->';
+      $$.R_Path := $$.R_Path + '(' + IntToStr(_step) + ')WhereClause1';
+      $$.R_Keyword := snkTables;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_TABLES;
+      $$.P_InsertChild(acmLast, $2);
+    }
+    ;
+    
+tySetClause:
+  | TK_SET tySetList
+    {
+      $$ := $2;
+      g_tree.P_Takeback($1);
+    }
+  | TK_SET tyGroupSetList
+    {
+      $$ := $2;
+      g_tree.P_Takeback($1);
+    }
+  ;
+
+tyGroupSetList:
+  | TK_LEFT_PARENT tySelectList TK_RIGHT_PARENT TK_OPERATOR TK_LEFT_PARENT tySelectList TK_RIGHT_PARENT 
+    {
+      $$ := g_tree.P_NewNode;
+      $$.R_Keyword := snkSet;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_SET;
+      $$.P_InsertChild(acmLast, $2);
+      $$.P_InsertChild(acmLast, $4);
+      $$.P_InsertChild(acmLast, $6);
+    }
+  | TK_LEFT_PARENT tySelectList TK_RIGHT_PARENT TK_OPERATOR tyQuery 
+    {
+      $$ := g_tree.P_NewNode;
+      $$.R_Keyword := snkSet;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_SET;
+      $$.P_InsertChild(acmLast, $2);
+      $$.P_InsertChild(acmLast, $4);
+      $$.P_InsertChild(acmLast, $5);
+    }
+    ;
+ 
+tySetList:
+  | tySetItem
+    {
+      $$ := g_tree.P_NewNode;
+      $$.R_Keyword := snkSet;
+      $$.R_Type := sntKey;
+      $$.R_Text := C_SET;
+      $$.P_InsertChild(acmLast, $1);
+    }
+  | tySetList TK_COMMA tySetItem
+    {
+      $$ := $1;
+      $$.P_InsertChild(acmLast, $3);
+    }
+    ;
+    
+tySetItem:
+  | tyFieldExpr TK_OPERATOR tyFieldExpr
+    {
+      $$ := $2;
+      $$.P_InsertChild(acmLast, $1);
+      $$.P_InsertChild(acmLast, $3);
+    }
+    ;
+
+%%
+
+{$I sqlLex.pas}
+
+var 
+	lexer : TLexer;
+	parser : TParser;
+	
+function getSyntexTree(I_SQL: string): ISQLTreeNode;
+begin
+  _step := 0;
+  G_Init;
+  result :=	g_tree;
+  
+  yyclear;
+  yyins := I_SQL;
+	lexer := TLexer.Create();
+	parser := TParser.Create();
+	parser.lexer := lexer;
+	parser.parse();
+
+end;
+	
+exports
+  getSyntexTree;
+  
+begin
+
+end.
