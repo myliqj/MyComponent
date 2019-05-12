@@ -33,7 +33,7 @@ requires
   xmlrtl,
   dbrtl,
   vcldb,
-  designide,
+  //designide,
   vclactnband,
   vclx,
   SynEdit_RXE7;

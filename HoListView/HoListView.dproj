@@ -4,11 +4,11 @@
         <MainSource>HoListView.dpk</MainSource>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
-        <TargetedPlatforms>1</TargetedPlatforms>
+        <TargetedPlatforms>3</TargetedPlatforms>
         <AppType>Package</AppType>
         <FrameworkType>VCL</FrameworkType>
         <ProjectVersion>16.1</ProjectVersion>
-        <Platform Condition="'$(Platform)'==''">Win32</Platform>
+        <Platform Condition="'$(Platform)'==''">Win64</Platform>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
         <Base>true</Base>
@@ -39,6 +39,12 @@
         <Cfg_2>true</Cfg_2>
         <Base>true</Base>
     </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win64)'!=''">
+        <Cfg_2_Win64>true</Cfg_2_Win64>
+        <CfgParent>Cfg_2</CfgParent>
+        <Cfg_2>true</Cfg_2>
+        <Base>true</Base>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
         <DCC_DebugInformation>1</DCC_DebugInformation>
         <DCC_UsePackage>vcl;rtl;vclx;inetdb;dbrtl;inet;dsnap;bdertl;vcldb;vcldbx;vclactnband;vclshlctrls;vclie;xmlrtl;inetdbbde;inetdbxpress;adortl;VclSmp;dxmdsD7;dxtrmdD7;dxdbtrD7;dxGDIPlusD7;cxLibraryVCLD7;dxDockingD7;cxEditorsVCLD7;dxThemeD7;cxDataD7;cxExtEditorsVCLD7;dxLayoutControlD7;dxComnD7;dxMasterViewD7;dxNavBarD7;cxPageControlVCLD7;cxPivotGridD7;cxGridD7;cxTreeListVCLD7;dxsbD7;cxSpreadSheetVCLD7;dxFlowChartD7;cxVerticalGridVCLD7;dxorgcD7;dxdborD7;dxBarD7;dxRibbonD7;dxBarDBNavD7;dxBarExtDBItemsD7;dxBarExtItemsD7;cxBarEditItemD7;dcldxSkinsCoreD7;dxSkinsCoreD7;dxPSCoreD7;dxPScxGrid6LnkD7;dxPScxCommonD7;dxPSLnksD7;dxPScxPivotGridLnkD7;dxPScxScheduler2LnkD7;cxSchedulerVCLD7;dxPScxSSLnkD7;dxPScxTLLnkD7;dxPScxVGridLnkD7;dxPSdxOCLnkD7;dxPSdxDBOCLnkD7;dxPSdxDBTVLnkD7;dxPSdxFCLnkD7;dxPSdxLCLnkD7;dxPSdxMVLnkD7;dxSkinscxPCPainterD7;dxSkinscxSchedulerPainterD7;dxSkinsdxBarPainterD7;dxSkinsdxDLPainterD7;dxSkinsdxLCPainterD7;dxSkinsdxNavBarPainterD7;dxSkinsdxRibbonPainterD7;SynEdit_D7;ip4000clientvcl7;ip4000v7;HoComponent;Python_d7;PythonVCL_d7;TeeUI87;Tee87;TeeDB87;TeeWorld87;TeePro87;TeeLanguage87;TeeGL87;TeeImage87;$(DCC_UsePackage)</DCC_UsePackage>
@@ -61,10 +67,13 @@
         <Icon_MainIcon>HoListView_Icon.ico</Icon_MainIcon>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
+        <DCC_Namespace>System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
+        <DCC_Namespace>System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;$(DCC_Namespace)</DCC_Namespace>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <Icon_MainIcon>HoListView_Icon.ico</Icon_MainIcon>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
@@ -79,6 +88,9 @@
         <DCC_Optimize>false</DCC_Optimize>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <ItemGroup>
@@ -112,11 +124,8 @@
                 </Source>
             </Delphi.Personality>
             <Platforms>
-                <Platform value="Android">False</Platform>
-                <Platform value="iOSDevice">False</Platform>
-                <Platform value="iOSSimulator">False</Platform>
                 <Platform value="Win32">True</Platform>
-                <Platform value="Win64">False</Platform>
+                <Platform value="Win64">True</Platform>
             </Platforms>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>
